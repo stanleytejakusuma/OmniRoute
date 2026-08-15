@@ -5,6 +5,7 @@
 
 import {
   CANONICAL_EFFORT_VALUES,
+  extendClaudeEffortValues,
   extendCodexGpt56EffortValues,
   extendDeepSeekEffortValues,
 } from "@/shared/reasoning/effortStandardization";
@@ -103,10 +104,14 @@ export function getThinkingCapabilityFields(
       ? {
           effort_tiers: hasDeclaredTiers
             ? [...supportedThinkingEfforts!]
-            : extendDeepSeekEffortValues(
+            : extendClaudeEffortValues(
                 providerId,
                 modelId,
-                extendCodexGpt56EffortValues(providerId, modelId, CANONICAL_EFFORT_VALUES)
+                extendDeepSeekEffortValues(
+                  providerId,
+                  modelId,
+                  extendCodexGpt56EffortValues(providerId, modelId, CANONICAL_EFFORT_VALUES)
+                )
               ),
         }
       : {}),

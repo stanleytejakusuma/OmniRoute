@@ -50,6 +50,77 @@ export function extendCodexGpt56EffortValues(
 }
 
 /**
+ * Claude-family model id pattern — same shape `supportsClaudeMaxEffort()`
+ * (open-sse/config/providerModels.ts) uses, kept local so this shared module
+ * stays leaf (no open-sse import).
+ */
+const CLAUDE_MODEL_PATTERN = /(?:^|[\/._-])claude(?:[._-]|$)/;
+const CLAUDE_MAX_EFFORT_UNSUPPORTED_FAMILY_PATTERNS = [/(?:^|[\/._-])haiku(?:[._-]|$)/];
+
+/**
+ * Provider ids/aliases whose upstream accepts Claude's native `max` effort
+ * (mirrors the request-time gate in `supportsMaxEffortForProvider`).
+ */
+function isClaudeFamilyProvider(provider: string | null | undefined): boolean {
+  const normalized = provider?.trim().toLowerCase() ?? "";
+  return (
+    normalized === "claude" ||
+    normalized === "cc" ||
+    normalized === "cnl" ||
+    normalized === "anthropic" ||
+    normalized.startsWith("anthropic-compatible-")
+  );
+}
+
+/**
+ * Expose the provider-native Claude `max` effort without widening the global
+ * request vocabulary — the same pattern `extendCodexGpt56EffortValues` uses for
+ * GPT-5.6 Max/Ultra. Appends `max` for a Claude-family model that supports it
+ * (any Claude model outside the haiku family, per `supportsClaudeMaxEffort`).
+ */
+export function extendClaudeEffortValues(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  baseValues: readonly string[]
+): string[] {
+  if (!isClaudeNativeMaxModel(provider, model)) return [...baseValues];
+  const values = [...baseValues];
+  return values.includes("max") ? values : [...values, "max"];
+}
+
+/**
+ * Whether `<provider>/<model>` is a Claude-family model that supports the native
+ * `max` effort (any Claude model outside the haiku family). Mirrors
+ * `supportsClaudeMaxEffort()` in open-sse/config/providerModels.ts.
+ *
+ * Like `isDeepSeekNativeMaxModel`, the provider may be unresolved at the point
+ * the canonical request params are folded in, so a `<prefix>/<model>` id carrying
+ * a Claude-family prefix is accepted as provider evidence too.
+ */
+export function isClaudeNativeMaxModel(
+  provider: string | null | undefined,
+  model: string | null | undefined
+): boolean {
+  const rawModel = model?.trim().toLowerCase();
+  if (!rawModel) return false;
+
+  const prefixMatch = rawModel.match(/^(claude|cc|cnl|anthropic|anthropic-compatible-[^/]+)\//);
+  const normalizedProvider = provider?.trim().toLowerCase() || prefixMatch?.[1];
+  if (!isClaudeFamilyProvider(normalizedProvider)) return false;
+
+  const normalizedModel = rawModel.replace(
+    /^(?:claude|cc|cnl|anthropic|anthropic-compatible-[^/]+)\//,
+    ""
+  );
+  const claudeMatch = normalizedModel.match(CLAUDE_MODEL_PATTERN);
+  if (!claudeMatch) return false;
+  const claudeScopedId = normalizedModel.slice(claudeMatch.index ?? 0);
+  return !CLAUDE_MAX_EFFORT_UNSUPPORTED_FAMILY_PATTERNS.some((pattern) =>
+    pattern.test(claudeScopedId)
+  );
+}
+
+/**
  * UI-facing tier synonyms mapped onto the canonical set. The issue (#6241) requested a
  * 5-tier UI vocabulary (Low / Medium / High / Extra / Max); that request collapses onto
  * the existing 5-value canonical set. "extra" and "max" are both synonyms for the top
@@ -171,12 +242,16 @@ function asModelId(value: unknown): string | undefined {
 export function normalizeReasoningRequest<T>(body: T, provider?: string | null): T {
   if (!isPlainObject(body)) return body;
 
-  // DeepSeek V4 has a native `max` tier above `high`. Canonical `max` normally
-  // collapses to `xhigh`, which DeepSeek maps back down to `high` — so preserve
-  // the literal value for those models instead of round-tripping it away.
+  // DeepSeek V4 and Claude-family models have a native `max` tier above `high`.
+  // Canonical `max` normally collapses to `xhigh` (the internal top tier); for
+  // these models preserve the literal value instead of round-tripping it away
+  // (DeepSeek maps xhigh back down to high; Claude steers max via
+  // output_config.effort="max").
   const rawEffort = typeof body.effort === "string" ? body.effort.trim().toLowerCase() : undefined;
   const canonicalEffort =
-    rawEffort === "max" && isDeepSeekNativeMaxModel(provider, asModelId(body.model))
+    rawEffort === "max" &&
+    (isDeepSeekNativeMaxModel(provider, asModelId(body.model)) ||
+      isClaudeNativeMaxModel(provider, asModelId(body.model)))
       ? ("max" as const)
       : normalizeEffort(body.effort);
   const canonicalThinking = body.thinking;

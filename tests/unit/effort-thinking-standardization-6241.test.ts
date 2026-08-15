@@ -9,8 +9,14 @@ import path from "node:path";
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-effort-6241-"));
 process.env.DATA_DIR = TEST_DATA_DIR;
 
-const { CANONICAL_EFFORT_VALUES, normalizeEffort, effortRequestSchema, normalizeReasoningRequest } =
-  await import("../../src/shared/reasoning/effortStandardization.ts");
+const {
+  CANONICAL_EFFORT_VALUES,
+  normalizeEffort,
+  effortRequestSchema,
+  normalizeReasoningRequest,
+  extendClaudeEffortValues,
+  isClaudeNativeMaxModel,
+} = await import("../../src/shared/reasoning/effortStandardization.ts");
 const { providerChatCompletionSchema } =
   await import("../../src/shared/validation/schemas/apiV1.ts");
 const core = await import("../../src/lib/db/core.ts");
@@ -190,4 +196,80 @@ test("enrichCatalogModelEntry exposes Max for Kiro GPT-5.6 Luna", () => {
   const caps = enriched.capabilities as Record<string, unknown>;
   assert.equal(caps.supportsThinking, true);
   assert.deepEqual(caps.effort_tiers, ["none", "low", "medium", "high", "xhigh", "max"]);
+});
+
+// ── extendClaudeEffortValues / isClaudeNativeMaxModel ─────────────────────
+
+test("extendClaudeEffortValues appends max for non-haiku Claude-family models", () => {
+  const base = [...CANONICAL_EFFORT_VALUES];
+  assert.deepEqual(extendClaudeEffortValues("claude", "claude-sonnet-5", base), [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  // Provider aliases (cc, cnl, anthropic, anthropic-compatible-*) qualify too.
+  assert.equal(extendClaudeEffortValues("cc", "claude-opus-5", base).includes("max"), true);
+  assert.equal(extendClaudeEffortValues("anthropic", "claude-opus-5", base).includes("max"), true);
+  assert.equal(
+    extendClaudeEffortValues("anthropic-compatible-mine", "claude-opus-5", base).includes("max"),
+    true
+  );
+  // Unresolved provider + provider-prefixed model id still resolves.
+  assert.equal(extendClaudeEffortValues(undefined, "claude/claude-opus-5", base).includes("max"), true);
+});
+
+test("extendClaudeEffortValues never adds max for haiku, non-claude, or other providers", () => {
+  const base = [...CANONICAL_EFFORT_VALUES];
+  assert.deepEqual(extendClaudeEffortValues("claude", "claude-haiku-4-5", base), base);
+  assert.deepEqual(extendClaudeEffortValues("claude", "claude-haiku-4-5-20251001", base), base);
+  // Non-claude model on a claude-family provider.
+  assert.deepEqual(extendClaudeEffortValues("claude", "gpt-5.6-sol", base), base);
+  // Claude model on a non-claude-family provider (routed namespace).
+  assert.deepEqual(extendClaudeEffortValues("openrouter", "anthropic/claude-sonnet-5", base), base);
+  assert.deepEqual(extendClaudeEffortValues("cursor", "claude-sonnet-5", base), base);
+  assert.deepEqual(extendClaudeEffortValues("codex", "claude-sonnet-5", base), base);
+  // Idempotent: never double-appends.
+  assert.deepEqual(
+    extendClaudeEffortValues("claude", "claude-sonnet-5", [...base, "max"]),
+    [...base, "max"]
+  );
+});
+
+test("isClaudeNativeMaxModel matches claude non-haiku, rejects everything else", () => {
+  assert.equal(isClaudeNativeMaxModel("claude", "claude-sonnet-5"), true);
+  assert.equal(isClaudeNativeMaxModel("cc", "claude-opus-5"), true);
+  assert.equal(isClaudeNativeMaxModel(undefined, "claude/claude-fable-5"), true);
+  assert.equal(isClaudeNativeMaxModel(undefined, "cc/claude-opus-5"), true);
+  assert.equal(isClaudeNativeMaxModel("claude", "claude-haiku-4-5"), false);
+  assert.equal(isClaudeNativeMaxModel("claude", "gpt-5.6-sol"), false);
+  assert.equal(isClaudeNativeMaxModel("openrouter", "anthropic/claude-sonnet-5"), false);
+  assert.equal(isClaudeNativeMaxModel("claude", ""), false);
+  assert.equal(isClaudeNativeMaxModel("claude", undefined), false);
+});
+
+test("canonical effort=max is preserved (not collapsed to xhigh) for claude models", () => {
+  // DeepSeek already preserved max; claude now does too (native output_config.effort="max").
+  const out = normalizeReasoningRequest(
+    { model: "claude/claude-sonnet-5", effort: "max" },
+    "claude"
+  ) as Record<string, unknown>;
+  assert.equal(out.reasoning_effort, "max");
+  assert.equal((out.reasoning as { effort?: string }).effort, "max");
+
+  // Provider-prefixed id alone is enough evidence.
+  const prefixed = normalizeReasoningRequest({
+    model: "cc/claude-sonnet-5",
+    effort: "max",
+  }) as Record<string, unknown>;
+  assert.equal(prefixed.reasoning_effort, "max");
+
+  // Non-claude models keep the historical collapse to xhigh.
+  const other = normalizeReasoningRequest(
+    { model: "openai/gpt-5", effort: "max" },
+    "openai"
+  ) as Record<string, unknown>;
+  assert.equal(other.reasoning_effort, "xhigh");
 });

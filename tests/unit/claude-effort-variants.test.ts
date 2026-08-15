@@ -88,21 +88,31 @@ test("isKnownClaudeEffortBaseModel returns false for a non-Claude model that als
 
 // ── claudeEffortLevelsFor ────────────────────────────────────────────────────
 
-test("xHigh is added only for models that support it", () => {
+test("xHigh is added only for models that support it; Max for non-haiku Claude", () => {
+  // Fable 5 / Opus 4.8: xhigh + max both supported.
   assert.deepEqual(claudeEffortLevelsFor("claude", "claude-fable-5"), [
     "low",
     "medium",
     "high",
     "xhigh",
+    "max",
   ]);
   assert.deepEqual(claudeEffortLevelsFor("claude", "claude-opus-4-8"), [
     "low",
     "medium",
     "high",
     "xhigh",
+    "max",
   ]);
-  // Opus 4.6 and Haiku 4.5 are flagged supportsXHighEffort:false in the registry.
-  assert.deepEqual(claudeEffortLevelsFor("claude", "claude-opus-4-6"), ["low", "medium", "high"]);
+  // Opus 4.6: registry flags supportsXHighEffort:false — no xhigh — but it is
+  // not haiku-family, so the native max tier is still advertised.
+  assert.deepEqual(claudeEffortLevelsFor("claude", "claude-opus-4-6"), [
+    "low",
+    "medium",
+    "high",
+    "max",
+  ]);
+  // Haiku 4.5: supportsXHighEffort:false AND haiku-family — neither xhigh nor max.
   assert.deepEqual(claudeEffortLevelsFor("claude", "claude-haiku-4-5-20251001"), [
     "low",
     "medium",
@@ -122,11 +132,15 @@ test("appends effort variant ids + names for eligible models only", () => {
     "claude/claude-fable-5-medium",
     "claude/claude-fable-5-high",
     "claude/claude-fable-5-xhigh",
+    "claude/claude-fable-5-max",
   ]);
   const high = out.find((m) => m.id === "claude/claude-fable-5-high");
   assert.equal(high?.name, "claude-fable-5 (High)");
   // root stays unprefixed — the provider-scoped models route serves it verbatim.
   assert.equal(high?.root, "claude-fable-5-high");
+  const max = out.find((m) => m.id === "claude/claude-fable-5-max");
+  assert.equal(max?.name, "claude-fable-5 (Max)");
+  assert.equal(max?.root, "claude-fable-5-max");
 });
 
 test("normalizes the provider prefix (cc → claude) when a canonical map is given", () => {
@@ -178,10 +192,10 @@ test("CLAUDE_EFFORT_SUFFIX_RE stays in sync across claudeEffortVariants/noThinki
   // gate identically, so any behavioral difference below is attributable only
   // to the effort-suffix regex, not to some other per-module gating rule.
   const BASE = "claude-opus-4-5";
-  const EFFORT_SUFFIXES = ["-low", "-medium", "-high", "-xhigh", "-XHIGH"];
+  const EFFORT_SUFFIXES = ["-low", "-medium", "-high", "-xhigh", "-max", "-XHIGH"];
   // Trailing tokens that look suffix-like but must NOT match the regex
-  // (anchored to exactly low/medium/high/xhigh at end-of-string).
-  const NON_MATCHING_SUFFIXES = ["-max", "-highest"];
+  // (anchored to exactly max/xhigh/high/medium/low at end-of-string).
+  const NON_MATCHING_SUFFIXES = ["-highest"];
 
   for (const suffix of EFFORT_SUFFIXES) {
     const qualifiedId = `claude/${BASE}${suffix}`;

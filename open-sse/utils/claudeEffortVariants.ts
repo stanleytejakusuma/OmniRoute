@@ -29,18 +29,22 @@
  * the catalog. Max/ultra are codex-only presets and are not synthesized here.
  */
 import { getModelSpec } from "@/shared/constants/modelSpecs";
-import { supportsXHighEffort } from "../config/providerModels.ts";
+import { supportsClaudeMaxEffort, supportsXHighEffort } from "../config/providerModels.ts";
 
 /** Base reasoning-effort levels advertised for every effort-capable Claude model. */
 export const CLAUDE_EFFORT_VARIANT_LEVELS = ["low", "medium", "high"] as const;
 /** Extra level advertised only for models that support extra-high effort. */
 export const CLAUDE_XHIGH_EFFORT_LEVEL = "xhigh";
+/** Provider-native top tier advertised only for models that support it (non-haiku). */
+export const CLAUDE_MAX_EFFORT_LEVEL = "max";
 
 export type ClaudeEffortVariantLevel =
-  (typeof CLAUDE_EFFORT_VARIANT_LEVELS)[number] | typeof CLAUDE_XHIGH_EFFORT_LEVEL;
+  | (typeof CLAUDE_EFFORT_VARIANT_LEVELS)[number]
+  | typeof CLAUDE_XHIGH_EFFORT_LEVEL
+  | typeof CLAUDE_MAX_EFFORT_LEVEL;
 
 // Ids that already carry a reasoning-effort suffix — never double-suffix them.
-const CLAUDE_EFFORT_SUFFIX_RE = /-(?:xhigh|high|medium|low)$/i;
+const CLAUDE_EFFORT_SUFFIX_RE = /-(?:max|xhigh|high|medium|low)$/i;
 const CLAUDE_NAME_RE = /claude/i;
 const NO_THINKING_PREFIX = "no-think/";
 
@@ -118,12 +122,17 @@ function normalizeProviderPrefix(
 
 /**
  * Effort levels to advertise for `<providerId>/<modelId>`. Low/Medium/High always;
- * xHigh only when the model supports it (single source of truth `supportsXHighEffort`).
+ * xHigh only when the model supports it (single source of truth `supportsXHighEffort`);
+ * Max only when the model supports Claude's native max effort (non-haiku family,
+ * `supportsClaudeMaxEffort`).
  */
 export function claudeEffortLevelsFor(providerId: string, modelId: string): string[] {
   const levels: string[] = [...CLAUDE_EFFORT_VARIANT_LEVELS];
   if (supportsXHighEffort(providerId, modelId)) {
     levels.push(CLAUDE_XHIGH_EFFORT_LEVEL);
+  }
+  if (supportsClaudeMaxEffort(modelId)) {
+    levels.push(CLAUDE_MAX_EFFORT_LEVEL);
   }
   return levels;
 }

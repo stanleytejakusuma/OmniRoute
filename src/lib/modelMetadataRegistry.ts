@@ -26,7 +26,9 @@ import { getSyncedPricing } from "@/lib/pricingSync";
 import { getPricingForModel as getDefaultPricingForModel } from "@/shared/constants/pricing";
 import {
   CANONICAL_EFFORT_VALUES,
+  extendClaudeEffortValues,
   extendCodexGpt56EffortValues,
+  extendDeepSeekEffortValues,
 } from "@/shared/reasoning/effortStandardization";
 
 const MODEL_METADATA_SCHEMA_VERSION = "model-metadata-v1";
@@ -468,10 +470,18 @@ export function enrichCatalogModelEntry<T extends JsonRecord>(
                   registryModel?.supportedThinkingEfforts &&
                   registryModel.supportedThinkingEfforts.length > 0
                     ? [...registryModel.supportedThinkingEfforts]
-                    : extendCodexGpt56EffortValues(
+                    : extendClaudeEffortValues(
                         metadata.provider,
                         metadata.model,
-                        CANONICAL_EFFORT_VALUES
+                        extendDeepSeekEffortValues(
+                          metadata.provider,
+                          metadata.model,
+                          extendCodexGpt56EffortValues(
+                            metadata.provider,
+                            metadata.model,
+                            CANONICAL_EFFORT_VALUES
+                          )
+                        )
                       ),
               }
             : {}),

@@ -58,7 +58,11 @@ test("A2: the provider can also be supplied explicitly (model id without prefix)
 });
 
 test("B: `max` still collapses to `xhigh` for every other provider", () => {
-  for (const model of ["openai/gpt-5", "anthropic/claude-opus-4-8", "z-ai/glm-5.2"]) {
+  // openai/z-ai are not Claude-family; cursor routes Claude but terminates at a
+  // different upstream whose vocabulary we do not control, so it keeps the
+  // canonical collapse. (Native claude/anthropic providers now PRESERVE max —
+  // see the claude tests in effort-thinking-standardization-6241.test.ts.)
+  for (const model of ["openai/gpt-5", "z-ai/glm-5.2", "cursor/claude-opus-4-8"]) {
     const out = normalizeReasoningRequest({ model, effort: "max" }) as Record<string, unknown>;
     assert.equal(out.reasoning_effort, "xhigh", `${model} must keep the canonical collapse`);
   }

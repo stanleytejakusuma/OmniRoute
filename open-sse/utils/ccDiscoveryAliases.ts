@@ -33,7 +33,7 @@ export const CC_DISCOVERY_COMBO_PREFIX = "claude/combo/";
 // Ids that already live under the claude/anthropic namespace — never re-mirror them.
 const ALREADY_CLAUDE_RE = /^(?:claude|anthropic)(?:\/|$)/i;
 // Ids that already carry a reasoning-effort suffix — v1 only mirrors base ids.
-const CLAUDE_EFFORT_SUFFIX_RE = /-(?:xhigh|high|medium|low)$/i;
+const CLAUDE_EFFORT_SUFFIX_RE = /-(?:max|xhigh|high|medium|low)$/i;
 const NO_THINKING_PREFIX = "no-think/";
 // Built-in `auto`/`auto/*` combos are synthesized by createBuiltinAutoCombo, NOT
 // stored in the DB combos table — the request-path resolver (getComboByName) can't

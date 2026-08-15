@@ -84,6 +84,43 @@ test("catalogHelpers: Kiro GPT-5.6 models expose the native Max tier", () => {
   }
 });
 
+test("catalogHelpers: Claude non-haiku models expose the native Max tier", () => {
+  assert.deepEqual(getThinkingCapabilityFields("claude", "claude-sonnet-5", true), {
+    thinking: true,
+    supportsThinking: true,
+    effort_tiers: ["none", "low", "medium", "high", "xhigh", "max"],
+  });
+  // Alias + anthropic-compatible relay providers qualify too.
+  assert.equal(
+    getThinkingCapabilityFields("cc", "claude-opus-5", true).effort_tiers?.includes("max"),
+    true
+  );
+  assert.equal(
+    getThinkingCapabilityFields("anthropic-compatible-mine", "claude-fable-5", true).effort_tiers
+      ?.includes("max"),
+    true
+  );
+  // Haiku-family Claude models never advertise max.
+  assert.deepEqual(getThinkingCapabilityFields("claude", "claude-haiku-4-5", true), {
+    thinking: true,
+    supportsThinking: true,
+    effort_tiers: ["none", "low", "medium", "high", "xhigh"],
+  });
+});
+
+test("catalogHelpers: declared tiers win verbatim (max not appended to declared lists)", () => {
+  // A provider with declared tiers keeps exactly its declared vocabulary — the
+  // claude extension only fills the canonical fallback, never overrides data.
+  assert.deepEqual(
+    getThinkingCapabilityFields("deepseek", "deepseek-v4-pro", true, ["none", "high", "max"]),
+    {
+      thinking: true,
+      supportsThinking: true,
+      effort_tiers: ["none", "high", "max"],
+    }
+  );
+});
+
 test("catalogHelpers: minKnownNumber ignores non-positive/unknown", () => {
   assert.equal(minKnownNumber([3, 1, 2]), 1);
   assert.equal(minKnownNumber([undefined, 0, -5, 7]), 7);
