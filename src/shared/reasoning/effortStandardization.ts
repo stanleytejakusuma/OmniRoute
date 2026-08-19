@@ -151,8 +151,12 @@ export function extendDeepSeekEffortValues(
   model: string | null | undefined,
   baseValues: readonly string[]
 ): string[] {
-  const values = [...baseValues];
-  if (!isDeepSeekNativeMaxModel(provider, model)) return values;
+  if (!isDeepSeekNativeMaxModel(provider, model)) return [...baseValues];
+  // DeepSeek V4's native vocabulary is low/high/max; "xhigh" is not a real
+  // tier upstream (it maps to high). Advertise the TRUE top tier `max`
+  // instead of the canonical synonym `xhigh` so clients surface the correct
+  // tier name (dropdown parity with what the upstream actually accepts).
+  const values = baseValues.filter((v) => v !== "xhigh");
   return values.includes("max") ? values : [...values, "max"];
 }
 

@@ -98,6 +98,10 @@ test("E: catalog effort tiers advertise `max` for native DeepSeek models only", 
 
   const deepseekTiers = extendDeepSeekEffortValues("deepseek", "deepseek-v4-pro", base);
   assert.ok(deepseekTiers.includes("max"), "native DeepSeek must advertise the max tier");
+  assert.ok(
+    !deepseekTiers.includes("xhigh"),
+    "DeepSeek must advertise its TRUE top tier `max` instead of the synonym `xhigh` (xhigh maps to high upstream)"
+  );
 
   const otherTiers = extendDeepSeekEffortValues("openai", "gpt-5", base);
   assert.ok(!otherTiers.includes("max"), "other providers must be untouched");
